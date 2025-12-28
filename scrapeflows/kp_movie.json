@@ -1,0 +1,118 @@
+{
+  "type": "movie",
+  "site": "kinopoisk.ru",
+  "doh_enabled": true,
+  "config": {
+    "apikey": {
+      "icon": "key",
+      "name": "API Key"
+    }
+  },
+  "steps": [
+    {
+      "retval": {
+        "ifempty": "apikey"
+      }
+    },
+    {
+      "doh": {
+        "host": "api.poiskkino.dev"
+      }
+    },
+    {
+      "http": {
+        "url": "https://api.poiskkino.dev/v1.4/movie/search?api_key={apikey}&query={title}&page=1",
+        "method": "GET",
+        "headers": {
+          "Accept": "application/json"
+        },
+        "timeout": 20,
+        "result": "metadata"
+      }
+    },
+    {
+      "collect": {
+        "source": "metadata",
+        "into": {
+          "ids": "['xp_texts', './docs//id']"
+        }
+      }
+    },
+    {
+      "loop": {
+        "source": "ids",
+        "item": "id",
+        "steps": [
+          {
+            "http": {
+              "url": "https://api.poiskkino.dev/v1.4/movie/{id}?api_key={$parent[apikey]}",
+              "method": "GET",
+              "headers": {
+                "Accept": "application/json"
+              },
+              "timeout": 20,
+              "result": "subject"
+            }
+          },
+          {
+            "collect": {
+              "source": "subject",
+              "into": {
+                "movie": {
+                  "title": "['xp_text', './name']",
+                  "tagline": "['xp_text', './tagline']",
+                  "original_available": "['xp_text', './premiere/world']",
+                  "summary": "['xp_text', './shortDescription']",
+                  "certificate": "['re_match', '\"release_dates\":.*?\"US\".*?\"certification\":\"([^\"]*?)\"']",
+                  "genre": "['xp_texts', './genres//name']",
+                  "actor": "['xp_texts', './persons//name']",
+                  "writer": "['re_matches', '\"name\":\"([^\"]*?)\"[^{{}}]*?\"department\":\"Writing\"']",
+                  "director": "['re_matches', '\"name\":\"([^\"]*?)\"[^{{}}]*?\"department\":\"Directing\"']",
+                  "extra": {
+                    "[plugin_id]": {
+                      "poster": [
+                        "['xp_text', './poster/url'"
+                      ],
+                      "backdrop": [
+                        "['xp_text', './backdrop/url'"
+                      ],
+                      "reference": {
+                        "themoviedb": "['xp_text', './externalId/tmdb', 'int']",
+                        "imdb": "['xp_text', './externalId/imdb']"
+                      },
+                      "collection_id": {
+                        "themoviedb": "['xp_text', './belongs_to_collection/id', 'int']"
+                      }
+                    }
+                  }
+                },
+                "rating": "['xp_text', './ratinf/kp']"
+              }
+            }
+          },
+          {
+            "collect": {
+              "source": "rating",
+              "into": {
+                "movie": {
+                  "extra": {
+                    "[plugin_id]": {
+                      "rating": {
+                        "[plugin_id]": "['re_match', '(.*)', 'float']"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "retval": {
+              "source": "movie"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
